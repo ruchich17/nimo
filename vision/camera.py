@@ -43,8 +43,8 @@ class Camera:
         self.empty = board.load_empty(max_side)
         self.board_cm = board.load_cm()
 
-    def read(self):
-        for _ in range(4):  # drop buffered frames so we see the dough as it is now
+    def read(self, flush=4):
+        for _ in range(flush):  # drop buffered frames so we see the dough as it is now
             self.cap.grab()
         ok, frame = self.cap.read()
         if not ok:
