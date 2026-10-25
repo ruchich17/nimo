@@ -7,6 +7,7 @@ instruction and an arrow. The instruction is also spoken.
     python scripts/run_human.py                 # overhead webcam (index 0 at the venue)
     python scripts/run_human.py --camera 1
     python scripts/run_human.py --photos <dir>  # offline: each SPACE moves to the next photo
+    python scripts/run_human.py --executor taught   # the real arm replays the taught stroke
 
 Keys (click the window first):  SPACE / Enter = I've done it    S = stop
                                 N = start a new roti            Q = quit
@@ -40,9 +41,9 @@ WIN = "Roti coach"
 class Session:
     """The decision loop on a worker thread; the window (main thread) only reads `state`."""
 
-    def __init__(self, source, live, voice, max_steps):
+    def __init__(self, source, live, voice, max_steps, executor="human"):
         self.source, self.live, self.voice, self.max_steps = source, live, voice, max_steps
-        self.human = make_executor("human")
+        self.human = make_executor(executor)
         self.robot = SafetyWrapper(self.human)
         self.human.on_instruction = self._instruct
         self.latest = None        # newest frame (PIL), board-cropped
@@ -172,13 +173,15 @@ def main():
     ap.add_argument("--photos", help="folder of rig photos instead of the camera")
     ap.add_argument("--steps", type=int, default=30)
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--executor", default="human", choices=["human", "taught"],
+                    help="taught = the real arm replays data/strokes/stroke.npz for every roll")
     a = ap.parse_args()
 
     live = not a.photos
     source = Camera(a.camera) if live else Photos(a.photos)
     if live and source.board is None:
         sys.exit("No board calibration. Run: python scripts/calibrate_board.py --camera %d" % a.camera)
-    s = Session(source, live, Voice(not a.quiet), a.steps)
+    s = Session(source, live, Voice(not a.quiet), a.steps, a.executor)
     s.start()
     cv2.namedWindow(WIN, cv2.WINDOW_AUTOSIZE)
     while True:

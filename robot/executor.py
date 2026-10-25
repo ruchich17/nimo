@@ -42,6 +42,9 @@ class StubExecutor(Executor):
 def make_executor(name):
     if name == "stub":
         return StubExecutor()
+    if name == "taught":
+        from robot.taught_backend import TaughtExecutor  # real arm replays the taught stroke
+        return TaughtExecutor()
     if name == "human":
         from robot.human_backend import HumanExecutor  # a person stands in for the arm
         return HumanExecutor()
