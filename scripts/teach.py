@@ -30,9 +30,11 @@ ARM_VLIM = 0.6       # rad/s per arm joint during replay (config default is 5.0)
 GRIP_VLIM = 1.0
 APPROACH_RAD_S = 0.3  # speed of the move from wherever the arm is to the stroke's start
 GRIP_CAL = os.path.join(os.path.dirname(STROKES), "gripper.json")
-GRIP_KP, GRIP_KD = 8.0, 1.0  # MIT stiffness (SDK default for the gripper); force = KP x squeeze
-GRIP_SWEEP = 0.8      # rad/s while opening/closing
-GRIP_STALL = 0.15     # target ahead of the fingers by this much (rad) = they've hit the handle
+GRIP_KP, GRIP_KD = 8.0, 1.0  # MIT stiffness and damping (SDK defaults); force = KP x squeeze
+GRIP_SWEEP = 0.6      # rad/s while opening/closing (full travel ~7.2 rad = ~12 s)
+GRIP_LEAD = 0.3      # contact needs the target at least this far ahead of the fingers (rad)...
+GRIP_STILL = 0.05     # ...and the fingers moved less than this (rad)...
+GRIP_STILL_S = 0.5    # ...over this long
 GRIP_SQUEEZE = 0.3    # aim this far past contact: ~2.4 N*m of squeeze
 
 
@@ -49,7 +51,7 @@ class Arm:
         self.r.connect()
         self.n = self.r.arm.num_joints
         self.gm = self.r._motor_map["gripper"]  # the one gripper motor
-        self.target = self.q().copy()
+        self.target = self.q().copy()  # trusted read (see q); also warms up the feedback
         self.grip = None        # gripper MIT target (rad) while gripping
         self.arm_on = False
         self.lock = threading.Lock()
@@ -61,7 +63,17 @@ class Arm:
         return self.arm_on
 
     def q(self):
-        return self.r.get_positions()
+        """Joint positions we can trust: the first reads after connecting can be all zeros
+        (nothing received yet), and moving toward those would make a joint lunge. Wait for
+        two consecutive reads that agree and contain no exact zeros."""
+        last = None
+        for _ in range(50):
+            p = self.r.get_positions()
+            if last is not None and not np.any(p == 0.0) and np.allclose(p, last, atol=0.02):
+                return p
+            last = p
+            time.sleep(0.02)
+        raise RuntimeError("no reliable joint feedback from the arm - check power and the USB cable")
 
     def _loop(self):
         while self._alive:
@@ -82,25 +94,42 @@ class Arm:
 
     def _grip_on(self):
         if self.grip is None:
+            g, cal = self.grip_pos(), gripper_cal()
+            lo, hi = sorted((cal["open"], cal["closed"]))
+            if not lo - 0.3 <= g <= hi + 0.3:
+                raise RuntimeError("gripper reads %.2f rad, outside its calibrated %.2f..%.2f - not enabling"
+                                   % (g, lo, hi))
             with self.lock:
-                self.grip = self.grip_pos()
+                self.grip = g
             self.gm.ensure_mode(Mode.MIT, 1000)
             self.gm.enable()
             time.sleep(0.1)
 
     def _sweep(self, to, stop_on_contact):
-        """Move the grip target toward `to`; with stop_on_contact, stop where the fingers stall."""
+        """Move the grip target toward `to`; with stop_on_contact, stop where the fingers stall.
+
+        Contact = the fingers have stopped moving (< GRIP_STILL rad in GRIP_STILL_S) while the
+        target is well ahead of them. Not "target ahead by X": the fingers always trail a
+        moving target, and that lag alone tripped the old check almost immediately.
+        """
         self._grip_on()
         sign = 1.0 if to > self.grip else -1.0
+        hist = []  # (time, actual position)
         while (to - self.grip) * sign > 0:
             with self.lock:
                 self.grip += sign * GRIP_SWEEP * 0.02
             time.sleep(0.02)
-            if stop_on_contact and (self.grip - self.grip_pos()) * sign > GRIP_STALL:
-                contact = self.grip_pos()
+            if not stop_on_contact:
+                continue
+            now, p = time.time(), self.grip_pos()
+            hist.append((now, p))
+            old = [h for h in hist if now - h[0] >= GRIP_STILL_S]
+            if old and (self.grip - p) * sign > GRIP_LEAD and abs(p - old[-1][1]) < GRIP_STILL:
                 with self.lock:
-                    self.grip = contact + sign * GRIP_SQUEEZE
-                return contact
+                    self.grip = p + sign * GRIP_SQUEEZE
+                return p
+        if stop_on_contact:  # let the fingers catch up with the end of the sweep
+            time.sleep(1.0)
         return None
 
     def open_gripper(self):
