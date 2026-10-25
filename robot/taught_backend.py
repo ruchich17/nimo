@@ -20,6 +20,8 @@ class TaughtExecutor(HumanExecutor):
     def __init__(self):
         super().__init__()
         self.arm = teach.Arm()
+        print("Gripping the roller (it must already be between the fingers)...")
+        self.arm.grip_firmly()
         self.arm.hold_here()  # enabled from the start, holding wherever it is
 
     def roll(self, direction_deg, pressure, length_cm):
