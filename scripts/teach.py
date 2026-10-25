@@ -26,6 +26,7 @@ from robot.rebot_sdk import make_arm
 
 STROKES = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "strokes")
 REC_HZ = 50
+MAX_STEP_DEG = 6      # a hand can't move a joint this far in 1/50 s; more = a bad reading
 ARM_VLIM = 0.6       # rad/s per arm joint during replay (config default is 5.0)
 GRIP_VLIM = 1.0
 APPROACH_RAD_S = 0.3  # speed of the move from wherever the arm is to the stroke's start
@@ -51,46 +52,72 @@ class Arm:
         self.r.connect()
         self.n = self.r.arm.num_joints
         self.gm = self.r._motor_map["gripper"]  # the one gripper motor
-        self.target = self.q().copy()  # trusted read (see q); also warms up the feedback
+        self.motors = [self.r._motor_map[n] for n in self.r.arm.joint_names] + [self.gm]
+        self.ctrls = list(self.r._ctrl_map.values())
         self.grip = None        # gripper MIT target (rad) while gripping
         self.arm_on = False
         self.lock = threading.Lock()
+        self.latest = None      # newest positions, written only by the bus thread
         self._alive = True
+        self.target = None
         threading.Thread(target=self._loop, daemon=True).start()
+        self.target = self.q().copy()  # trusted read (see q)
 
     @property
     def enabled(self):
         return self.arm_on
 
+    def pos_now(self):
+        """Latest positions from the bus thread (may be mid-motion), or None before any arrive."""
+        with self.lock:
+            return None if self.latest is None else self.latest.copy()
+
     def q(self):
-        """Joint positions we can trust: the first reads after connecting can be all zeros
-        (nothing received yet), and moving toward those would make a joint lunge. Wait for
-        two consecutive reads that agree and contain no exact zeros."""
+        """Settled positions we can trust: wait until no motor reads an exact zero (nothing
+        received yet - moving toward that makes a joint lunge) and two reads 60 ms apart agree."""
         last = None
-        for _ in range(50):
-            p = self.r.get_positions()
-            if last is not None and not np.any(p == 0.0) and np.allclose(p, last, atol=0.02):
-                return p
-            last = p
-            time.sleep(0.02)
+        for _ in range(100):
+            p = self.pos_now()
+            if p is not None and not np.any(p == 0.0):
+                if last is not None and np.allclose(p, last, atol=0.02):
+                    return p
+                last = p
+            time.sleep(0.06)
         raise RuntimeError("no reliable joint feedback from the arm - check power and the USB cable")
 
     def _loop(self):
+        """The only thread on the bus. Every 5 ms: send commands (each one gets a reply), ask
+        idle motors for their position, then drain ALL replies. Reading on another thread
+        while this one floods the bus with gripper commands left arm readings seconds stale."""
         while self._alive:
             with self.lock:
-                t, g, on = self.target.copy(), self.grip, self.arm_on
+                t = None if self.target is None else self.target.copy()
+                g, on = self.grip, self.arm_on
             try:
-                if on:
+                if on and t is not None:
                     self.r.arm.send_pos_vel(t[:self.n])
+                else:
+                    for m in self.motors[:self.n]:
+                        m.request_feedback()
                 if g is not None:
                     self.gm.send_mit(float(g), 0.0, GRIP_KP, GRIP_KD, 0.0)
+                else:
+                    self.gm.request_feedback()
+                for _ in range(4):
+                    time.sleep(0.001)
+                    for c in self.ctrls:
+                        c.poll_feedback_once()
+                states = [m.get_state() for m in self.motors]
+                if all(st is not None for st in states):
+                    with self.lock:
+                        self.latest = np.array([st.pos for st in states])
             except Exception as e:
                 print("[loop]", e)
-            time.sleep(0.005)
+            time.sleep(0.001)
 
     # ---- gripper ----
     def grip_pos(self):
-        return float(self.q()[self.n])
+        return float(self.pos_now()[self.n])
 
     def _grip_on(self):
         if self.grip is None:
@@ -168,8 +195,9 @@ class Arm:
             time.sleep(seconds / steps)
 
     def freeze(self):
+        p = self.pos_now()
         with self.lock:
-            self.target = self.q().copy()
+            self.target = p
 
     def release(self, gripper=False):
         """Arm joints limp (and the gripper too if gripper=True)."""
@@ -227,11 +255,9 @@ def record(name):
           "   Press Enter to START recording.")
     rec, t0, stop = [], time.time(), threading.Event()
 
-    def sampler():  # plain reads: the arm is moving, so settled reads (Arm.q) never come
+    def sampler():  # latest reads: the arm is moving, so settled reads (Arm.q) never come
         while not stop.is_set():
-            p = arm.r.get_positions()
-            if not np.any(p == 0.0):
-                rec.append((time.time() - t0, p))
+            rec.append((time.time() - t0, arm.pos_now()))
             time.sleep(1.0 / REC_HZ)
     th = threading.Thread(target=sampler, daemon=True)
     th.start()
@@ -244,6 +270,10 @@ def record(name):
     os.makedirs(STROKES, exist_ok=True)
     path = os.path.join(STROKES, name + ".npz")
     np.savez(path, t=t, q=q, park=park)
+    step = np.degrees(np.abs(np.diff(q[:, :arm.n], axis=0)).max())
+    if step > MAX_STEP_DEG:
+        print("\nWARNING: a joint jumped %.0f deg between two samples - stale readings. "
+              "Record again before replaying." % step)
     span = np.degrees(q.max(0) - q.min(0))
     print("\nSaved %s: %d samples, %.1f s. Joint ranges (deg): %s" % (
         path, len(t), t[-1], " ".join("%.0f" % s for s in span)))
