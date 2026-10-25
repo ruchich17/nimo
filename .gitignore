@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Recreate with the commands in Instructions.md / CLAUDE.md (menagerie model, Seeed SDK)
+third_party/
+
+# macOS
+.DS_Store
+
+# Large media: videos (~118 MB) and iPhone HEIC originals (converted copies in data/dough_photos/jpg/)
+*.MOV
+*.mov
+*.HEIC
+
+# Camera survey frame shows people, not the rig
+data/cameras.jpg
+
+# Photos stay local, never on GitHub (dough photos, calibration images)
+*.jpg
+*.jpeg
+*.png

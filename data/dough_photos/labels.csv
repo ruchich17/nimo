@@ -1,0 +1,39 @@
+file,stage,expected,notes
+Photo on 10-24-26 at 3.00 PM.jpg,disc,roll,webcam rig; medium disc roughly round - not thin yet?
+Photo on 10-24-26 at 3.00 PM #2.jpg,disc,done,webcam rig; medium disc; finished (user)
+Photo on 10-24-26 at 3.00 PM #3.jpg,disc,done,webcam rig; medium disc; finished (user)
+Photo on 10-24-26 at 3.00 PM #4.jpg,ball,roll,webcam rig; small ball; person at left edge of frame (not over board); sequence start 
+Photo on 10-24-26 at 3.01 PM.jpg,ball,roll,webcam rig; small ball; right after sequence started 
+Photo on 10-24-26 at 3.01 PM #3.jpg,disc,roll,webcam rig; slightly lopsided disc
+Photo on 10-24-26 at 3.01 PM #4.jpg,disc,roll,webcam rig; slightly lopsided disc
+Photo on 10-24-26 at 3.01 PM #5.jpg,disc,done,webcam rig; largest webcam disc; finished 
+jpg/IMG_9187.jpg,ball,roll,overhead; sequence start
+jpg/IMG_9188.jpg,ball,roll,oblique angle
+jpg/IMG_9189.jpg,ball,roll,oblique angle
+jpg/IMG_9190.jpg,ball,roll,oblique angle
+jpg/IMG_9191.jpg,oval,roll 90,flattened; wider left-right so roll up-down
+jpg/IMG_9192.jpg,oval,roll 90,wider left-right so roll up-down
+jpg/IMG_9193.jpg,oval,roll 90,larger; oblique so up-down is foreshortened
+jpg/IMG_9194.jpg,thin_round,done,oblique - looks oval only from perspective
+jpg/IMG_9195.jpg,thin_round,done,overhead; finished product 
+jpg/IMG_9196.jpg,thin_round,done,overhead; finished product 
+jpg/IMG_9197.jpg,thin_round,done,oblique side view; finished product 
+jpg/IMG_9198.jpg,thin_round,done,oblique side view; finished product 
+jpg/IMG_9199.jpg,thin_round,done,overhead; finished product 
+jpg/IMG_9200.jpg,ball,roll,overhead; new ball; sequence start
+Photo on 10-24-26 at 4.23 PM #2.jpg,oval,roll 90,rig2; wider left-right (Claude's guess)
+Photo on 10-24-26 at 4.24 PM.jpg,lopsided,roll,rig2 (Claude's guess)
+Photo on 10-24-26 at 4.24 PM #3.jpg,lopsided,roll,rig2 (Claude's guess)
+Photo on 10-24-26 at 4.25 PM.jpg,oval,roll 90,rig2; wider left-right (Claude's guess)
+lopsided 1.jpg,lopsided,roll,rig2
+lopsided 2.jpg,lopsided,roll,rig2; crescent
+lopsided 3.jpg,oval,roll 90,rig2; wider left-right (Claude's guess)
+lopsided 4.jpg,lopsided,rotate_dough,rig2; taller up-down (Claude's guess) - arm can't roll left-right
+lopsided 5.jpg,lopsided,roll,rig2
+lopsided 6.jpg,lopsided,roll 90,rig2; wider left-right (Claude's guess)
+lopsided 7.jpg,lopsided,roll,rig2
+lopsided 8 .jpg,lopsided,roll,rig2
+lopsided 9.jpg,lopsided,roll,rig2
+lopsided 10 .jpg,lopsided,roll,rig2
+broken dough 1.jpg,broken,stop,rig2; torn in two - abort (user)
+broken dough 2.jpg,broken,stop,rig2; cracked - abort (user)
