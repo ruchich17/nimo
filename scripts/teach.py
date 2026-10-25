@@ -220,13 +220,18 @@ def record(name):
     arm.open_gripper()
     input("   Hold the roller with its orange handle between the fingers, then press Enter to GRIP.")
     arm.grip_firmly()
-    input("\n2) The ARM IS LIMP: support it. Move it to the start of the stroke (roller just above\n"
-          "   the near edge of the dough). Press Enter to START recording.")
+    input("\n2) The ARM IS LIMP: support it. Move it to a PARK pose OUT OF THE CAMERA'S VIEW,\n"
+          "   where it can wait while the camera looks at the dough. Press Enter to save it.")
+    park = arm.q()
+    input("\n3) Move it to the start of the stroke (roller just above the near edge of the dough).\n"
+          "   Press Enter to START recording.")
     rec, t0, stop = [], time.time(), threading.Event()
 
-    def sampler():
+    def sampler():  # plain reads: the arm is moving, so settled reads (Arm.q) never come
         while not stop.is_set():
-            rec.append((time.time() - t0, arm.q()))
+            p = arm.r.get_positions()
+            if not np.any(p == 0.0):
+                rec.append((time.time() - t0, p))
             time.sleep(1.0 / REC_HZ)
     th = threading.Thread(target=sampler, daemon=True)
     th.start()
@@ -238,11 +243,11 @@ def record(name):
     q = np.array([r[1] for r in rec])
     os.makedirs(STROKES, exist_ok=True)
     path = os.path.join(STROKES, name + ".npz")
-    np.savez(path, t=t, q=q)
+    np.savez(path, t=t, q=q, park=park)
     span = np.degrees(q.max(0) - q.min(0))
     print("\nSaved %s: %d samples, %.1f s. Joint ranges (deg): %s" % (
         path, len(t), t[-1], " ".join("%.0f" % s for s in span)))
-    input("\n3) Keep supporting the arm and press Enter to LOCK it in place.")
+    input("\n4) Keep supporting the arm and press Enter to LOCK it in place.")
     arm.hold_here()
     input("   Arm locked. Rest it safely if you like, then press Enter: the arm will go LIMP.\n"
           "   SUPPORT IT FIRST.")
@@ -254,9 +259,11 @@ def record(name):
 
 
 def replay(name, speed, arm=None, confirm=True):
-    """Move to the recorded start, play the stroke, end back at its start. Returns the Arm."""
+    """Move to the recorded start, play the stroke, then go to the park pose (out of the
+    camera's view) if one was recorded, else back to the start. Returns the Arm."""
     d = np.load(os.path.join(STROKES, name + ".npz"))
     t, q = d["t"] / speed, d["q"]
+    park = d["park"] if "park" in d.files else q[0]
     arm = arm or Arm()
     if confirm:
         input("\nThe arm will MOVE (slowly). Clear the area, hand on the stop. Press Enter to start.")
@@ -276,8 +283,10 @@ def replay(name, speed, arm=None, confirm=True):
             time.sleep(dt)
         with arm.lock:
             arm.target = q[i].copy()
-    arm.go(q[0], 2.0)
-    print("Done; holding at the stroke start.")
+    dist = np.abs(park[:arm.n] - q[-1][:arm.n]).max()
+    print("Stroke done; parking...")
+    arm.go(park, max(1.5, dist / APPROACH_RAD_S))
+    print("Parked.")
     return arm
 
 
